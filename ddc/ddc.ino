@@ -2,10 +2,13 @@
 #include <Adafruit_ST7735.h> // Hardware-specific library
 #include <SPI.h>
 #include <SD.h>
+#include <TimerOne.h>
 
 #define CUP_PRESENT_THRESHOLD 600   // this holds the voltage reading that a cup is considered present
-#define SERIAL_READ_TIMEOUT 100     // (ms)
-#define CUP_PRESENT_TIMEOUT 100     // (ms)
+#define SERIAL_READ_TIMEOUT 10000     // (ms)
+#define CUP_PRESENT_TIMEOUT 10000     // (ms)
+#define NUM_INGREDIENTS 2
+#define CUP_SENSOR_PIN A5
 
 #define FALSE 0
 #define TRUE 1
@@ -21,104 +24,120 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
 boolean isDispensing;   // holds dispensing status
 boolean isCupDetected;  // holds cup detection status
-boolean timerValid;     // holds whether timer has overfload and passed target value
+volatile boolean timerValid;     // holds whether timer has overfload and passed target value
 
-int ingredients[6];     // holds amount of dipense time for respective ingredients
+int ingredients[NUM_INGREDIENTS];     // holds amount of dipense time for respective ingredients
 int currentIngred;      // holds the current ingredient that is being dispensed
 int amountDispensed;    // holds the amount dispensed if interupted
-int timerValue;         // hods the amount of time (in ms) that has passed during the timer
+volatile int timerValue;         // hods the amount of time (in ms) that has passed during the timer
 int targetValue;        // holds the amount of time (in ms) that the timer should run for
 
-int pins[6];            // Allows for easy changing and referencing of pins
+int pins[NUM_INGREDIENTS];            // Allows for easy changing and referencing of pins
 
 void setup(void) {
 
     // initialize pins
-    pins[0] = ;
-    pins[1] = ;
-    pins[2] = ;
-    pins[3] = ;
-    pins[4] = ;
-    pins[5] = ;
+    pins[0] = 2;
+    pins[1] = 3;
+//    pins[2] = 3;
+//    pins[3] = 4;
+//    pins[4] = 5;
+//    pins[5] = ;
 
     // set pins to output
     for (int i = 0; i < NUM_INGREDIENTS; i++)
     {
         pinMode(pins[i], OUTPUT);
+        digitalWrite(pins[i], HIGH);
     }
 
     // configure serial port
     Serial.begin(9600);
+    Serial.println("Board Reset");
 
+    // configure timer
+    targetValue = 0;
+    Timer1.initialize(1000);
+    Timer1.attachInterrupt(timerInterrupt);
+     
     // initialize display
-    tft.initR(INITR_BLACKTAB);
-    if (!SD.begin(SD_CS)) {
-        Serial.println("DEBUG :: Error init screen");
-        return;
-    }
-
-    tft.fillScreen(ST7735_BLACK); // Clear display
+    // tft.initR(INITR_BLACKTAB);
+    // if (!SD.begin(SD_CS)) {
+    //     Serial.println("DEBUG :: Error init screen");
+    //     return;
+    // }
+    // tft.fillScreen(ST7735_BLACK); // Clear display
 
     // configure cup sensor 
-
-}
+    pinMode(CUP_SENSOR_PIN, INPUT);
+  }
 
 
 
 void loop(void) {
    // update display
-    bmpDraw("screen0.bmp", 0, 0);
-
+    // bmpDraw("screen0.bmp", 0, 0);
+  char input;
     // initialize dispense variables
     isDispensing = false;
     isCupDetected = false;
 
    // wait for read incoming character
     while (Serial.available() == 0)
-   /* just wait */ ;
+       ;/* just wait */  // Serial.println("Waiting for Serial Input");
 
     /* read the incoming byte */
-    int input = Serial.read();
-
+    input = Serial.read();
+  
    // test for operation
-    if (input != "D")
+    if (input != 'D')
     {
-        continue;
+       Serial.println("Invalid Command");
+        return;
     }
+    Serial.print('Y');
+    Serial.println("Reading Ingredients...");
    // read in ingredients and store into array
    if(!readIngredients()) {
-        continue;
+        Serial.println("Error Reading ingredients");
+        return;
     }
 
    // wait for cup
-    if (analogRead(A0) > CUP_PRESENT_THRESHOLD)
-    {
-        // cup is not detected
-        bmpDraw("screen1.bmp", 0, 0);
+    // if (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD)
+    // {
+    //    Serial.println("Cup Not Detected");
+    //     // cup is not detected
+    //     // bmpDraw("screen1.bmp", 0, 0);
 
-        startTimer(CUP_PRESENT_TIMEOUT);
+    //     startTimer(CUP_PRESENT_TIMEOUT);
 
-        // set a timer to see if user waits too long
-        while(!isCupDetected && timerValid)   // timerValid is updated when timer expires
-        {
-            // check again. if valid, continue
-            if(analogRead(A0) <= CUP_PRESENT_THRESHOLD) 
-            {
-                Timer1.stop();
-                isCupDetected = true;
-            }
-        }
-        if (!timerValid)
-        {
-            if(!sendcommand_getAck('N')) {
-                // handle the error somehow
-            }
-            continue; // start entire dispensing process order
-        }
-    }
+    //     // set a timer to see if user waits too long
+    //     while(!isCupDetected && timerValid)   // timerValid is updated when timer expires
+    //     {
+    //         // check again. if valid, continue
+    //         if(analogRead(CUP_SENSOR_PIN) <= CUP_PRESENT_THRESHOLD) 
+    //         {
+    //             Timer1.stop();
+    //             isCupDetected = true;
+    //         }
+    //     }
+    //     if (!timerValid)
+    //     {
+    //         Serial.println("No cup detected before timer expired");
+    //         if(!sendCommand_getAck('N')) {
+    //             // handle the error somehow
+    //         }
+    //         return; // start entire dispensing process order
+    //     }
+    // }
 
    // update display
-    bmpDraw("screen2.bmp", 0, 0);
+    Serial.println("Cup Detected. Dispensing...");
+    // DEBUG:
+    isCupDetected = true;
+    
+    // bmpDraw("screen2.bmp", 0, 0);
    // loop through all ingredients
     int i;
     for (i = 0; i < NUM_INGREDIENTS; i++)
@@ -132,12 +151,12 @@ void loop(void) {
 
     if (i == NUM_INGREDIENTS) // all ingredients dispensed
     {
-         if(!sendcommand_getAck('Z')) {
+         if(!sendCommand_getAck('Z')) {
         // handle the error somehow
         }
     } else
     {
-         if(!sendcommand_getAck('N')) {
+         if(!sendCommand_getAck('N')) {
         // handle the error somehow
         }
 
@@ -145,7 +164,7 @@ void loop(void) {
   
 }
 
-boolean sendCommnad_getAck(char aCommand) {
+boolean sendCommand_getAck(char aCommand) {
     // send aCommand over serial and wait for a response
 
     startTimer(SERIAL_READ_TIMEOUT);
@@ -170,41 +189,68 @@ boolean sendCommnad_getAck(char aCommand) {
 void timerInterrupt(void) 
 {
     if(timerValue > targetValue) {
-        timerValue = 0;
-        timerValid = false;
         Timer1.stop();
-    } else 
+         Serial.println("Timer Expired");
+        timerValid = false;
+    } else
     {
         timerValue++;
+        // Serial.println(timerValue);
     }
 }
 
+
 boolean readIngredients(void) {
     // this function is responsible for populating the array that holds the ingredient amounts.
-    
-    for (int i = 0; i < NUM_INGREDIENTS; i++)
+    char dString[15], temp;
+    int i, j;
+
+    Serial.println("Entered readIngredients");
+    for (i = 0; i < NUM_INGREDIENTS; i++)
     {
-        startTimer(SERIAL_READ_TIMEOUT);
-
-        while (Serial.available() == 0 && timerValid)
-            ; /* just wait */ 
-
-        Timer1.stop();
-
-        if (!timerValid)
-        {
-            return false;
-        }
-
+        j = 0;
+        Serial.println("In for loop");
         // read in value, store them into ints.
-        int temp = Serial.read();
-        ingredients[i] = temp;
+        while(TRUE) 
+        {
+          
+            startTimer(SERIAL_READ_TIMEOUT);
+            Serial.println("Timer Started");
+
+            while (Serial.available() == 0 && timerValid)
+                ;// Serial.println("Waiting ingredient read"); /* just wait */ 
+
+            if (!timerValid)
+            {
+                Serial.println("Exiting readIngredients\n");
+                return false;
+            }
+
+            temp = Serial.read();
+            if (temp == 'T') 
+            {
+                Serial.println("Read T\n");
+                dString[j] = '\0';
+                int amount = atoi(dString);
+                Serial.print(amount);
+                ingredients[i] = amount;
+                break;
+            } else if (temp < '0' || temp > '9')
+            {
+                 Serial.println("Read Invalid Char:");
+                 Serial.print(temp);
+                // invalid char
+                break;
+            } else
+            {
+                Serial.println("Read Valid Char");
+                Serial.print(temp);
+                dString[j] = temp;
+                j++;
+            }
+        }
     }
-
     return true;
-    // it will return true if all ingredients are read correctly. 
-
-    // it will return false if something goes wrong.
 }
 
 
@@ -212,7 +258,7 @@ boolean checkforCup(void)
 {
     while (isDispensing) 
     {
-        if (analogRead(A0) > CUP_PRESENT_THRESHOLD) // cup is no longer detected
+        if (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD) // cup is no longer detected
         {
             // this will occur if voltage drops below some value.
             isCupDetected = false;
@@ -230,7 +276,7 @@ boolean checkforCup(void)
             // enable walk away timer
             startTimer(CUP_PRESENT_TIMEOUT);
 
-            while (analogRead(A0) > CUP_PRESENT_THRESHOLD && timerValid) 
+            while (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD && timerValid) 
                 ; /*just wait*/
 
             if (!timerValid)
@@ -256,9 +302,10 @@ boolean startDispensing(int aIngred, int aTime) {
     // This function will be responsible for:
     //  set interupt timer value as aTime
 
-
-    //  set dispensing equal to true
-    isDispensing = true;
+    Serial.print("Ingredient Number: \n");
+    Serial.println(aIngred);
+    Serial.print("Ingredient Time: \n");
+    Serial.println(aTime);
 
     // initialize amount dispensed
     amountDispensed = 0;
@@ -267,17 +314,21 @@ boolean startDispensing(int aIngred, int aTime) {
     startTimer(aTime);
 
     //  change output value to DISPENSE on pin for aIngre
-    digitalWrite(pins[currentIngred], ON);
+    digitalWrite(pins[aIngred], LOW);
 
     //  ensure cup stays present. isDispensing will get changed by timer interrupt
-    if(!checkforCup()) 
-    {
-        return false;
-    }
+    // if(!checkforCup()) 
+    // {
+    //     return false;
+    // }
+    
+    while(timerValid)
+      ;
+     Serial.print("Done Dispensing Ingredient ");
+     Serial.println(aIngred);
 
     //  stop dispensing on current slot
-    digitalWrite(pins[currentIngred], OFF);
-    isDispensing = false;
+    digitalWrite(pins[aIngred], HIGH);
     return true;
 }
 
@@ -285,6 +336,7 @@ void startTimer(int aTime)
 {
     timerValid = true;
     targetValue = aTime;
+    timerValue = 0;
     Timer1.initialize(1000);
 }
 
@@ -415,17 +467,17 @@ void bmpDraw(char *filename, uint8_t x, uint8_t y) {
 // May need to reverse subscript order if porting elsewhere.
 
 uint16_t read16(File f) {
-  uint16_t result;
-  ((uint8_t *)&result)[0] = f.read(); // LSB
-  ((uint8_t *)&result)[1] = f.read(); // MSB
-  return result;
+    uint16_t result;
+    ((uint8_t *)&result)[0] = f.read(); // LSB
+    ((uint8_t *)&result)[1] = f.read(); // MSB
+    return result;
 }
 
 uint32_t read32(File f) {
-  uint32_t result;
-  ((uint8_t *)&result)[0] = f.read(); // LSB
-  ((uint8_t *)&result)[1] = f.read();
-  ((uint8_t *)&result)[2] = f.read();
-  ((uint8_t *)&result)[3] = f.read(); // MSB
-  return result;
+    uint32_t result;
+    ((uint8_t *)&result)[0] = f.read(); // LSB
+    ((uint8_t *)&result)[1] = f.read();
+    ((uint8_t *)&result)[2] = f.read();
+    ((uint8_t *)&result)[3] = f.read(); // MSB
+    return result;
 }
