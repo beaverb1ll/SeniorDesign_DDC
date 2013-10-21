@@ -3,7 +3,9 @@
 #include <SPI.h>
 #include <SD.h>
 
-#define CUP_PRESENT_THRESHOLD 600
+#define CUP_PRESENT_THRESHOLD 600   // this holds the voltage reading that a cup is considered present
+#define SERIAL_READ_TIMEOUT 100     // (ms)
+#define CUP_PRESENT_TIMEOUT 100     // (ms)
 
 #define FALSE 0
 #define TRUE 1
@@ -17,11 +19,15 @@
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-boolean isDispensing; // holds dispensing status
-boolean isCupDetected; // holds cup detection status
+boolean isDispensing;   // holds dispensing status
+boolean isCupDetected;  // holds cup detection status
+boolean timerValid;     // holds whether timer has overfload and passed target value
+
 int ingredients[6];     // holds amount of dipense time for respective ingredients
 int currentIngred;      // holds the current ingredient that is being dispensed
 int amountDispensed;    // holds the amount dispensed if interupted
+int timerValue;         // hods the amount of time (in ms) that has passed during the timer
+int targetValue;        // holds the amount of time (in ms) that the timer should run for
 
 int pins[6];            // Allows for easy changing and referencing of pins
 
@@ -35,20 +41,22 @@ void setup(void) {
     pins[4] = ;
     pins[5] = ;
 
+    // set pins to output
     for (int i = 0; i < NUM_INGREDIENTS; i++)
     {
         pinMode(pins[i], OUTPUT);
     }
+
     // configure serial port
     Serial.begin(9600);
 
     // initialize display
     tft.initR(INITR_BLACKTAB);
     if (!SD.begin(SD_CS)) {
-        Serial.println("N");
+        Serial.println("DEBUG :: Error init screen");
         return;
     }
-    Serial.println("OK!");
+
     tft.fillScreen(ST7735_BLACK); // Clear display
 
     // configure cup sensor 
@@ -87,8 +95,8 @@ void loop(void) {
     {
         // cup is not detected
         bmpDraw("screen1.bmp", 0, 0);
-        timerValid = true;
-        timer.start();
+
+        startTimer(CUP_PRESENT_TIMEOUT);
 
         // set a timer to see if user waits too long
         while(!isCupDetected && timerValid)   // timerValid is updated when timer expires
@@ -96,7 +104,7 @@ void loop(void) {
             // check again. if valid, continue
             if(analogRead(A0) <= CUP_PRESENT_THRESHOLD) 
             {
-                timer.stop();
+                Timer1.stop();
                 isCupDetected = true;
             }
         }
@@ -140,12 +148,11 @@ void loop(void) {
 boolean sendCommnad_getAck(char aCommand) {
     // send aCommand over serial and wait for a response
 
-    timerValid = true;
-    timer.start();
+    startTimer(SERIAL_READ_TIMEOUT);
     while (Serial.available() == 0 && timerValid)
           ;  /* just wait */
     
-    timer.stop();
+    Timer1.stop();
 
     if (!timerValid)
     {
@@ -160,18 +167,29 @@ boolean sendCommnad_getAck(char aCommand) {
     return false;
 }
 
+void timerInterrupt(void) 
+{
+    if(timerValue > targetValue) {
+        timerValue = 0;
+        timerValid = false;
+        Timer1.stop();
+    } else 
+    {
+        timerValue++;
+    }
+}
+
 boolean readIngredients(void) {
     // this function is responsible for populating the array that holds the ingredient amounts.
     
     for (int i = 0; i < NUM_INGREDIENTS; i++)
     {
-        timerValid = true;
-        timer.start();
+        startTimer(SERIAL_READ_TIMEOUT);
 
         while (Serial.available() == 0 && timerValid)
-            /* just wait */ ;
+            ; /* just wait */ 
 
-        timer.stop();
+        Timer1.stop();
 
         if (!timerValid)
         {
@@ -199,27 +217,31 @@ boolean checkforCup(void)
             // this will occur if voltage drops below some value.
             isCupDetected = false;
 
+            // stop timer
+            Timer1.stop();
+
             // get time passed so far from timer
             // save it to amountDispensed Variable
-            dispenseTimer.stop();
-
+            amountDispensed = timerValue;
+            
             // stop dispensing of currentIngred
             digitalWrite(pins[currentIngred], OFF);
 
             // enable walk away timer
-            timerValid = true;
-            timer.start();
+            startTimer(CUP_PRESENT_TIMEOUT);
 
             while (analogRead(A0) > CUP_PRESENT_THRESHOLD && timerValid) 
                 ; /*just wait*/
 
-            timer.stop();
             if (!timerValid)
             {
                 return false;
             }
             isCupDetected = true;
-            dispenseTimer.resume();
+
+            // restore timer value
+            timerValue = amountDispensed;
+            startTimer(ingredients[currentIngred]);
             digitalWrite(pins[currentIngred], ON);
         }
     }
@@ -234,6 +256,7 @@ boolean startDispensing(int aIngred, int aTime) {
     // This function will be responsible for:
     //  set interupt timer value as aTime
 
+
     //  set dispensing equal to true
     isDispensing = true;
 
@@ -241,8 +264,9 @@ boolean startDispensing(int aIngred, int aTime) {
     amountDispensed = 0;
 
     //  start timer
-    dispenseTimer.start();
-    //  change output value to DISPENSE on pin for aIngred
+    startTimer(aTime);
+
+    //  change output value to DISPENSE on pin for aIngre
     digitalWrite(pins[currentIngred], ON);
 
     //  ensure cup stays present. isDispensing will get changed by timer interrupt
@@ -255,6 +279,13 @@ boolean startDispensing(int aIngred, int aTime) {
     digitalWrite(pins[currentIngred], OFF);
     isDispensing = false;
     return true;
+}
+
+void startTimer(int aTime) 
+{
+    timerValid = true;
+    targetValue = aTime;
+    Timer1.initialize(1000);
 }
 
 
