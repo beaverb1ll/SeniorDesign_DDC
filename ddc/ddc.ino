@@ -32,8 +32,8 @@ int targetValue;        // holds the amount of time (in ms) that the timer shoul
 
 int pins[NUM_INGREDIENTS];            // Allows for easy changing and referencing of pins
 
-void setup(void) {
-
+void setup(void) 
+{
     // initialize pins
     pins[0] = 2;
     pins[1] = 3;
@@ -69,9 +69,7 @@ void setup(void) {
 
     // configure cup sensor 
     pinMode(CUP_SENSOR_PIN, INPUT);
-  }
-
-
+}
 
 void loop(void) 
 {
@@ -98,7 +96,8 @@ void loop(void)
     Serial.print('Y');
     // Serial.println("Reading Ingredients...");
     // read in ingredients and store into array
-   if(!readIngredients()) {
+   if(!readIngredients()) 
+   {
         // Serial.println("Error Reading ingredients");
         Serial.print('N');
         return;
@@ -127,16 +126,16 @@ void loop(void)
         if (!timerValid)
         {
             // Serial.println("No cup detected before timer expired");
-            if(!sendCommand_getAck('N')) {
+            if(!sendCommand_getAck('N')) 
+            {
                 // handle the error somehow
             }
-            return; // start entire dispensing process order
+            return; // start entire dispensing process over
         }
     }
 
     // update display
     // Serial.println("Cup Detected. Dispensing...");
-    
     bmpDraw("screen2.bmp", 0, 0);
 
    // loop through all ingredients
@@ -152,7 +151,8 @@ void loop(void)
     Serial.print('Z');
 }
 
-boolean sendCommand_getAck(char aCommand) {
+boolean sendCommand_getAck(char aCommand) 
+{
     // send aCommand over serial and wait for a response
 
     startTimer(0, SERIAL_READ_TIMEOUT);
@@ -185,7 +185,8 @@ void timerInterrupt(void)
 }
 
 
-boolean readIngredients(void) {
+boolean readIngredients(void) 
+{
     // this function is responsible for populating the array that holds the ingredient amounts.
     char dString[15], temp;
     int i, j;
@@ -283,7 +284,8 @@ boolean checkforCup(void)
     return true;
 }
 
-boolean startDispensing(int aIngred, int aTime) {
+boolean startDispensing(int aIngred, int aTime) 
+{
     // this will take in a ingredient value and a time value.
     // the ingredient value specifies the ingreient slot that will dispense with
     // the time value will specify the amount of time the ingredient will be opened.
@@ -327,7 +329,8 @@ void startTimer(int startTime, int stopTime)
 
 #define BUFFPIXEL 20
 
-void bmpDraw(char *filename, uint8_t x, uint8_t y) {
+void bmpDraw(char *filename, uint8_t x, uint8_t y) 
+{
 
   File     bmpFile;
   int      bmpWidth, bmpHeight;   // W+H in pixels
@@ -443,14 +446,16 @@ void bmpDraw(char *filename, uint8_t x, uint8_t y) {
 // BMP data is stored little-endian, Arduino is little-endian too.
 // May need to reverse subscript order if porting elsewhere.
 
-uint16_t read16(File f) {
+uint16_t read16(File f) 
+{
     uint16_t result;
     ((uint8_t *)&result)[0] = f.read(); // LSB
     ((uint8_t *)&result)[1] = f.read(); // MSB
     return result;
 }
 
-uint32_t read32(File f) {
+uint32_t read32(File f) 
+{
     uint32_t result;
     ((uint8_t *)&result)[0] = f.read(); // LSB
     ((uint8_t *)&result)[1] = f.read();
