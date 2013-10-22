@@ -7,7 +7,7 @@
 #define CUP_PRESENT_THRESHOLD 600   // this holds the voltage reading that a cup is considered present
 #define SERIAL_READ_TIMEOUT 10000     // (ms)
 #define CUP_PRESENT_TIMEOUT 10000     // (ms)
-#define NUM_INGREDIENTS 2
+#define NUM_INGREDIENTS 6
 #define CUP_SENSOR_PIN A5
 
 #define ON LOW
@@ -37,10 +37,10 @@ void setup(void) {
     // initialize pins
     pins[0] = 2;
     pins[1] = 3;
-//    pins[2] = 3;
-//    pins[3] = 4;
-//    pins[4] = 5;
-//    pins[5] = ;
+    pins[2] = 5;
+    pins[3] = 6;
+    pins[4] = 7;
+    pins[5] = 8;
 
     // set pins to output
     for (int i = 0; i < NUM_INGREDIENTS; i++)
@@ -78,9 +78,6 @@ void loop(void)
     char input;
     int i;
 
-    // initialize dispense variables
-    isCupDetected = false;
-
     // update display
     bmpDraw("screen0.bmp", 0, 0);
 
@@ -107,51 +104,45 @@ void loop(void)
         return;
     }
 
-   // wait for cup
-    // if (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD)
-    // {
-    //    Serial.println("Cup Not Detected");
-    //     // cup is not detected
-    //     // bmpDraw("screen1.bmp", 0, 0);
+    // wait for cup
+    if (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD)
+    {
+        // Serial.println("Cup Not Detected");
+        // cup is not detected
+        isCupDetected = false;
+        bmpDraw("screen1.bmp", 0, 0);
 
-    //     startTimer(CUP_PRESENT_TIMEOUT);
+        startTimer(0, CUP_PRESENT_TIMEOUT);
 
-    //     // set a timer to see if user waits too long
-    //     while(!isCupDetected && timerValid)   // timerValid is updated when timer expires
-    //     {
-    //         // check again. if valid, continue
-    //         if(analogRead(CUP_SENSOR_PIN) <= CUP_PRESENT_THRESHOLD) 
-    //         {
-    //             Timer1.stop();
-    //             isCupDetected = true;
-    //         }
-    //     }
-    //     if (!timerValid)
-    //     {
-    //         Serial.println("No cup detected before timer expired");
-    //         if(!sendCommand_getAck('N')) {
-    //             // handle the error somehow
-    //         }
-    //         return; // start entire dispensing process order
-    //     }
-    // }
+        // set a timer to see if user waits too long
+        while(!isCupDetected && timerValid)   // timerValid is updated when timer expires
+        {
+            // check again. if valid, continue
+            if(analogRead(CUP_SENSOR_PIN) <= CUP_PRESENT_THRESHOLD) 
+            {
+                Timer1.stop();
+                isCupDetected = true;
+            }
+        }
+        if (!timerValid)
+        {
+            // Serial.println("No cup detected before timer expired");
+            if(!sendCommand_getAck('N')) {
+                // handle the error somehow
+            }
+            return; // start entire dispensing process order
+        }
+    }
 
     // update display
     // Serial.println("Cup Detected. Dispensing...");
-   
-
-
-
-    // DEBUG:
-    isCupDetected = true;
-    
-    
     
     bmpDraw("screen2.bmp", 0, 0);
 
    // loop through all ingredients
     for (i = 0; i < NUM_INGREDIENTS; i++)
     {
+        currentIngred = i;
         if(!startDispensing(i, ingredients[i]))
         {
             // stop on failure
@@ -164,7 +155,7 @@ void loop(void)
 boolean sendCommand_getAck(char aCommand) {
     // send aCommand over serial and wait for a response
 
-    startTimer(SERIAL_READ_TIMEOUT);
+    startTimer(0, SERIAL_READ_TIMEOUT);
     while (Serial.available() == 0 && timerValid)
           ;  /* just wait */
 
@@ -205,7 +196,7 @@ boolean readIngredients(void) {
 
         while(true) 
         {
-            startTimer(SERIAL_READ_TIMEOUT);
+            startTimer(0, SERIAL_READ_TIMEOUT);
 
             while (Serial.available() == 0 && timerValid)
                 ;/* just wait */ 
@@ -236,7 +227,7 @@ boolean readIngredients(void) {
         }
     }
 
-    startTimer(SERIAL_READ_TIMEOUT);
+    startTimer(0, SERIAL_READ_TIMEOUT);
     while (Serial.available() == 0 && timerValid)
         ;/* just wait */ 
     if (!timerValid)
@@ -259,9 +250,6 @@ boolean checkforCup(void)
     {
         if (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD) // cup is no longer detected
         {
-            // this will occur if voltage drops below some value.
-            isCupDetected = false;
-
             // stop timer
             Timer1.stop();
 
@@ -273,7 +261,7 @@ boolean checkforCup(void)
             digitalWrite(pins[currentIngred], OFF);
 
             // enable walk away timer
-            startTimer(CUP_PRESENT_TIMEOUT);
+            startTimer(0, CUP_PRESENT_TIMEOUT);
 
             while (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD && timerValid) 
                 ; /*just wait*/
@@ -282,12 +270,14 @@ boolean checkforCup(void)
             {
                 return false;
             }
-            isCupDetected = true;
 
             // restore timer value
-            timerValue = amountDispensed;
-            startTimer(ingredients[currentIngred]);
+            startTimer(amountDispensed, ingredients[currentIngred]);
             digitalWrite(pins[currentIngred], ON);
+        } else if(!timerValid)
+        {
+            digitalWrite(pins[currentIngred], OFF);
+            isDispensing = false;
         }
     }
     return true;
@@ -302,35 +292,29 @@ boolean startDispensing(int aIngred, int aTime) {
     amountDispensed = 0;
 
     //  start timer
-    startTimer(aTime);
+    startTimer(0, aTime);
 
     //  change output value to DISPENSE on pin for aIngred
     digitalWrite(pins[aIngred], ON);
     isDispensing = true;
 
     //  ensure cup stays present. isDispensing will get changed by timer interrupt
-    // if(!checkforCup()) 
-    // {
-    //     return false;
-    // }
+    if(!checkforCup()) 
+    {
+        // this will happen if cup is removed for too long
+        return false;
+    }
     
-    while(timerValid)
-      ; /* just wait*/
-
-    //  stop dispensing on current slot
-    digitalWrite(pins[aIngred], OFF);
-    isDispensing = false;
     return true;
 }
 
-void startTimer(int aTime) 
+void startTimer(int startTime, int stopTime) 
 {
     timerValid = true;
-    targetValue = aTime;
-    timerValue = 0;
+    targetValue = stopTime;
+    timerValue = startTime;
     Timer1.initialize(1000);
 }
-
 
 
 // This function opens a Windows Bitmap (BMP) file and
