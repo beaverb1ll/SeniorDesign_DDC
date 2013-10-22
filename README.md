@@ -10,6 +10,10 @@ T -> End Line
 Z -> Finished dispensing the current drink
 
 
+#### Sample Dispense Code
+```` bash
+D3000T3000TF
+````
 
 Examples:
 
