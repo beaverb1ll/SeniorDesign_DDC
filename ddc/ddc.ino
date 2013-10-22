@@ -10,15 +10,13 @@
 #define NUM_INGREDIENTS 2
 #define CUP_SENSOR_PIN A5
 
-#define FALSE 0
-#define TRUE 1
-#define OFF HIGH
 #define ON LOW
+#define OFF HIGH
 
-#define SD_CS   10  // Chip select line for SD card
-#define TFT_CS  6  // Chip select line for TFT display
-#define TFT_DC  7  // Data/command line for TFT
-#define TFT_RST  8  // Reset line for TFT (or connect to +5V)
+#define SD_CS    4  // Chip select line for SD card
+#define TFT_CS  10  // Chip select line for TFT display
+#define TFT_DC   9  // Data/command line for TFT
+#define TFT_RST  0  // Reset line for TFT (or connect to +5V)
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
@@ -48,7 +46,7 @@ void setup(void) {
     for (int i = 0; i < NUM_INGREDIENTS; i++)
     {
         pinMode(pins[i], OUTPUT);
-        digitalWrite(pins[i], HIGH);
+        digitalWrite(pins[i], OFF);
     }
 
     // configure serial port
@@ -61,12 +59,13 @@ void setup(void) {
     Timer1.attachInterrupt(timerInterrupt);
      
     // initialize display
-    // tft.initR(INITR_BLACKTAB);
-    // if (!SD.begin(SD_CS)) {
-    //     Serial.println("DEBUG :: Error init screen");
-    //     return;
-    // }
-    // tft.fillScreen(ST7735_BLACK); // Clear display
+     tft.initR(INITR_BLACKTAB);   // initialize a ST7735S chip, black tab
+
+    if (!SD.begin(SD_CS)) 
+    {
+        Serial.println("SD Card failed!");
+        return;
+    }
 
     // configure cup sensor 
     pinMode(CUP_SENSOR_PIN, INPUT);
@@ -74,13 +73,16 @@ void setup(void) {
 
 
 
-void loop(void) {
-   // update display
-    // bmpDraw("screen0.bmp", 0, 0);
-  char input;
+void loop(void) 
+{
+    char input;
+    int i;
+
     // initialize dispense variables
-    isDispensing = false;
     isCupDetected = false;
+
+    // update display
+    bmpDraw("screen0.bmp", 0, 0);
 
    // wait for read incoming character
     while (Serial.available() == 0)
@@ -92,14 +94,16 @@ void loop(void) {
    // test for operation
     if (input != 'D')
     {
-       Serial.println("Invalid Command");
+       // Serial.println("Invalid Command");
+        Serial.print('N');
         return;
     }
     Serial.print('Y');
-    Serial.println("Reading Ingredients...");
-   // read in ingredients and store into array
+    // Serial.println("Reading Ingredients...");
+    // read in ingredients and store into array
    if(!readIngredients()) {
-        Serial.println("Error Reading ingredients");
+        // Serial.println("Error Reading ingredients");
+        Serial.print('N');
         return;
     }
 
@@ -132,36 +136,29 @@ void loop(void) {
     //     }
     // }
 
-   // update display
-    Serial.println("Cup Detected. Dispensing...");
+    // update display
+    // Serial.println("Cup Detected. Dispensing...");
+   
+
+
+
     // DEBUG:
     isCupDetected = true;
     
-    // bmpDraw("screen2.bmp", 0, 0);
+    
+    
+    bmpDraw("screen2.bmp", 0, 0);
+
    // loop through all ingredients
-    int i;
     for (i = 0; i < NUM_INGREDIENTS; i++)
     {
         if(!startDispensing(i, ingredients[i]))
         {
             // stop on failure
-            break;
+            return;
         }
     }
-
-    if (i == NUM_INGREDIENTS) // all ingredients dispensed
-    {
-         if(!sendCommand_getAck('Z')) {
-        // handle the error somehow
-        }
-    } else
-    {
-         if(!sendCommand_getAck('N')) {
-        // handle the error somehow
-        }
-
-    }
-  
+    Serial.print('Z');
 }
 
 boolean sendCommand_getAck(char aCommand) {
@@ -170,16 +167,14 @@ boolean sendCommand_getAck(char aCommand) {
     startTimer(SERIAL_READ_TIMEOUT);
     while (Serial.available() == 0 && timerValid)
           ;  /* just wait */
-    
-    Timer1.stop();
 
     if (!timerValid)
     {
         return false;
     }
 
-    int temp = Serial.read();
-    if (temp == 'Y')
+    char temp = Serial.read();
+    if (temp == 'Y' || temp == 'y')
     {
         return true;
     }
@@ -188,14 +183,13 @@ boolean sendCommand_getAck(char aCommand) {
 
 void timerInterrupt(void) 
 {
-    if(timerValue > targetValue) {
+    if(timerValue > targetValue) 
+    {
         Timer1.stop();
-         Serial.println("Timer Expired");
         timerValid = false;
     } else
     {
         timerValue++;
-        // Serial.println(timerValue);
     }
 }
 
@@ -205,52 +199,57 @@ boolean readIngredients(void) {
     char dString[15], temp;
     int i, j;
 
-    Serial.println("Entered readIngredients");
     for (i = 0; i < NUM_INGREDIENTS; i++)
     {
         j = 0;
-        Serial.println("In for loop");
-        // read in value, store them into ints.
-        while(TRUE) 
+
+        while(true) 
         {
-          
             startTimer(SERIAL_READ_TIMEOUT);
-            Serial.println("Timer Started");
 
             while (Serial.available() == 0 && timerValid)
-                ;// Serial.println("Waiting ingredient read"); /* just wait */ 
+                ;/* just wait */ 
 
             if (!timerValid)
             {
-                Serial.println("Exiting readIngredients\n");
+                Serial.print('N');
                 return false;
             }
 
             temp = Serial.read();
             if (temp == 'T') 
             {
-                Serial.println("Read T\n");
                 dString[j] = '\0';
                 int amount = atoi(dString);
-                Serial.print(amount);
                 ingredients[i] = amount;
+                Serial.print('Y');
                 break;
             } else if (temp < '0' || temp > '9')
             {
-                 Serial.println("Read Invalid Char:");
-                 Serial.print(temp);
                 // invalid char
                 break;
             } else
             {
-                Serial.println("Read Valid Char");
-                Serial.print(temp);
                 dString[j] = temp;
                 j++;
             }
         }
     }
-    return true;
+
+    startTimer(SERIAL_READ_TIMEOUT);
+    while (Serial.available() == 0 && timerValid)
+        ;/* just wait */ 
+    if (!timerValid)
+    {
+        return false;
+    }
+    temp = Serial.read();
+    if (temp == 'F')
+    {
+        Serial.print('Y');
+        return true;
+    }
+    return false;
 }
 
 
@@ -299,22 +298,15 @@ boolean startDispensing(int aIngred, int aTime) {
     // the ingredient value specifies the ingreient slot that will dispense with
     // the time value will specify the amount of time the ingredient will be opened.
 
-    // This function will be responsible for:
-    //  set interupt timer value as aTime
-
-    Serial.print("Ingredient Number: \n");
-    Serial.println(aIngred);
-    Serial.print("Ingredient Time: \n");
-    Serial.println(aTime);
-
     // initialize amount dispensed
     amountDispensed = 0;
 
     //  start timer
     startTimer(aTime);
 
-    //  change output value to DISPENSE on pin for aIngre
-    digitalWrite(pins[aIngred], LOW);
+    //  change output value to DISPENSE on pin for aIngred
+    digitalWrite(pins[aIngred], ON);
+    isDispensing = true;
 
     //  ensure cup stays present. isDispensing will get changed by timer interrupt
     // if(!checkforCup()) 
@@ -323,12 +315,11 @@ boolean startDispensing(int aIngred, int aTime) {
     // }
     
     while(timerValid)
-      ;
-     Serial.print("Done Dispensing Ingredient ");
-     Serial.println(aIngred);
+      ; /* just wait*/
 
     //  stop dispensing on current slot
-    digitalWrite(pins[aIngred], HIGH);
+    digitalWrite(pins[aIngred], OFF);
+    isDispensing = false;
     return true;
 }
 
@@ -369,37 +360,39 @@ void bmpDraw(char *filename, uint8_t x, uint8_t y) {
 
   if((x >= tft.width()) || (y >= tft.height())) return;
 
-  Serial.println();
-  Serial.print("Loading image '");
-  Serial.print(filename);
-  Serial.println('\'');
+//  Serial.println();
+//  Serial.print("Loading image '");
+//  Serial.print(filename);
+//  Serial.println('\'');
 
   // Open requested file on SD card
   if ((bmpFile = SD.open(filename)) == NULL) {
-    Serial.print("File not found");
+//    Serial.print("File not found");
     return;
   }
 
   // Parse BMP header
   if(read16(bmpFile) == 0x4D42) { // BMP signature
-    Serial.print("File size: "); Serial.println(read32(bmpFile));
+//    Serial.print("File size: "); Serial.println(
+    read32(bmpFile);
     (void)read32(bmpFile); // Read & ignore creator bytes
     bmpImageoffset = read32(bmpFile); // Start of image data
-    Serial.print("Image Offset: "); Serial.println(bmpImageoffset, DEC);
+//    Serial.print("Image Offset: "); Serial.println(bmpImageoffset, DEC);
     // Read DIB header
-    Serial.print("Header size: "); Serial.println(read32(bmpFile));
+//    Serial.print("Header size: "); Serial.println(
+    read32(bmpFile);
     bmpWidth  = read32(bmpFile);
     bmpHeight = read32(bmpFile);
     if(read16(bmpFile) == 1) { // # planes -- must be '1'
       bmpDepth = read16(bmpFile); // bits per pixel
-      Serial.print("Bit Depth: "); Serial.println(bmpDepth);
+//      Serial.print("Bit Depth: "); Serial.println(bmpDepth);
       if((bmpDepth == 24) && (read32(bmpFile) == 0)) { // 0 = uncompressed
 
         goodBmp = true; // Supported BMP format -- proceed!
-        Serial.print("Image size: ");
-        Serial.print(bmpWidth);
-        Serial.print('x');
-        Serial.println(bmpHeight);
+//        Serial.print("Image size: ");
+//        Serial.print(bmpWidth);
+//        Serial.print('x');
+//        Serial.println(bmpHeight);
 
         // BMP rows are padded (if needed) to 4-byte boundary
         rowSize = (bmpWidth * 3 + 3) & ~3;
@@ -451,15 +444,15 @@ void bmpDraw(char *filename, uint8_t x, uint8_t y) {
             tft.pushColor(tft.Color565(r,g,b));
           } // end pixel
         } // end scanline
-        Serial.print("Loaded in ");
-        Serial.print(millis() - startTime);
-        Serial.println(" ms");
+//        Serial.print("Loaded in ");
+//        Serial.print(millis() - startTime);
+//        Serial.println(" ms");
       } // end goodBmp
     }
   }
 
   bmpFile.close();
-  if(!goodBmp) Serial.println("BMP format not recognized.");
+  // if(!goodBmp) Serial.println("BMP format not recognized.");
 }
 
 // These read 16- and 32-bit types from the SD card file.
