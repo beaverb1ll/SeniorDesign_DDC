@@ -131,7 +131,8 @@ void loop(void)
             {
                 // handle the error somehow
             }
-            return; // start entire dispensing process over
+            bmpDraw("screen2.bmp", 0, 0);
+            return; // wait for another order.
         }
     }
 
@@ -145,8 +146,8 @@ void loop(void)
         currentIngred = i;
         if(!startDispensing(i, ingredients[i]))
         {
-            // stop on failure
-            return;
+        	// if here, cup was missing for too long after dispensing began, so consider order completed.
+            break;
         }
     }
     Serial.print('Z');
