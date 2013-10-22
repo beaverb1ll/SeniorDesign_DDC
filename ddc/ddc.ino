@@ -66,6 +66,8 @@ void setup(void)
         Serial.println("SD Card failed!");
         return;
     }
+     // update display
+    bmpDraw("screen0.bmp", 0, 0);
 
     // configure cup sensor 
     pinMode(CUP_SENSOR_PIN, INPUT);
@@ -76,8 +78,7 @@ void loop(void)
     char input;
     int i;
 
-    // update display
-    bmpDraw("screen0.bmp", 0, 0);
+   
 
    // wait for read incoming character
     while (Serial.available() == 0)
@@ -149,6 +150,9 @@ void loop(void)
         }
     }
     Serial.print('Z');
+    
+    // update display
+    bmpDraw("screen0.bmp", 0, 0);
 }
 
 boolean sendCommand_getAck(char aCommand) 
