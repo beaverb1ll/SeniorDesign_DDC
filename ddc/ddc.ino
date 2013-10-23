@@ -8,7 +8,7 @@
 #define SERIAL_READ_TIMEOUT 10000     // (ms)
 #define CUP_PRESENT_TIMEOUT 10000     // (ms)
 #define NUM_INGREDIENTS 6
-#define CUP_SENSOR_PIN A5
+#define CUP_SENSOR_PIN A4
 
 #define ON LOW
 #define OFF HIGH
@@ -17,8 +17,6 @@
 #define TFT_CS  10  // Chip select line for TFT display
 #define TFT_DC   9  // Data/command line for TFT
 #define TFT_RST  0  // Reset line for TFT (or connect to +5V)
-
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
 boolean isDispensing;   // holds dispensing status
 boolean isCupDetected;  // holds cup detection status
@@ -31,6 +29,13 @@ volatile int timerValue;         // hods the amount of time (in ms) that has pas
 int targetValue;        // holds the amount of time (in ms) that the timer should run for
 
 int pins[NUM_INGREDIENTS];            // Allows for easy changing and referencing of pins
+
+#if defined(__SAM3X8E__)
+    #undef __FlashStringHelper::F(string_literal)
+    #define F(string_literal) string_literal
+#endif
+
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
 void setup(void) 
 {
@@ -54,8 +59,6 @@ void setup(void)
     Serial.println("Board Reset");
 
     // configure timer
-    targetValue = 0;
-    Timer1.initialize(1000);
     Timer1.attachInterrupt(timerInterrupt);
      
     // initialize display
@@ -66,9 +69,8 @@ void setup(void)
         Serial.println("SD Card failed!");
         return;
     }
-     // update display
-    bmpDraw("screen0.bmp", 0, 0);
-
+    bmpDraw("SCREEN0.BMP", 0, 0);
+    
     // configure cup sensor 
     pinMode(CUP_SENSOR_PIN, INPUT);
 }
@@ -77,9 +79,7 @@ void loop(void)
 {
     char input;
     int i;
-
-   
-
+    
    // wait for read incoming character
     while (Serial.available() == 0)
        ;/* just wait */  // Serial.println("Waiting for Serial Input");
@@ -107,10 +107,10 @@ void loop(void)
     // wait for cup
     if (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD)
     {
-        // Serial.println("Cup Not Detected");
+        Serial.println("Cup Not Detected");
         // cup is not detected
         isCupDetected = false;
-        bmpDraw("screen1.bmp", 0, 0);
+        bmpDraw("SCREEN1.BMP", 0, 0);
 
         startTimer(0, CUP_PRESENT_TIMEOUT);
 
@@ -131,14 +131,14 @@ void loop(void)
             {
                 // handle the error somehow
             }
-            bmpDraw("screen2.bmp", 0, 0);
+            bmpDraw("SCREEN0.BMP", 0, 0);
             return; // wait for another order.
         }
     }
 
     // update display
     // Serial.println("Cup Detected. Dispensing...");
-    bmpDraw("screen2.bmp", 0, 0);
+    bmpDraw("SCREEN2.BMP", 0, 0);
 
    // loop through all ingredients
     for (i = 0; i < NUM_INGREDIENTS; i++)
@@ -146,13 +146,14 @@ void loop(void)
         currentIngred = i;
         if(!startDispensing(i, ingredients[i]))
         {
-        	// if here, cup was missing for too long after dispensing began, so consider order completed.
+            // if here, cup was missing for too long after dispensing began, so consider order completed.
             break;
         }
     }
     Serial.print('Z');
     
     // update display
+    bmpDraw("screen3.bmp", 0, 0);
     bmpDraw("screen0.bmp", 0, 0);
 }
 
@@ -265,6 +266,8 @@ boolean checkforCup(void)
             
             // stop dispensing of currentIngred
             digitalWrite(pins[currentIngred], OFF);
+            
+            bmpDraw("screen1.bmp", 0, 0);
 
             // enable walk away timer
             startTimer(0, CUP_PRESENT_TIMEOUT);
@@ -280,6 +283,7 @@ boolean checkforCup(void)
             // restore timer value
             startTimer(amountDispensed, ingredients[currentIngred]);
             digitalWrite(pins[currentIngred], ON);
+            bmpDraw("screen2.bmp", 0, 0);
         } else if(!timerValid)
         {
             digitalWrite(pins[currentIngred], OFF);
@@ -334,8 +338,7 @@ void startTimer(int startTime, int stopTime)
 
 #define BUFFPIXEL 20
 
-void bmpDraw(char *filename, uint8_t x, uint8_t y) 
-{
+void bmpDraw(char *filename, uint8_t x, uint8_t y) {
 
   File     bmpFile;
   int      bmpWidth, bmpHeight;   // W+H in pixels
@@ -359,19 +362,20 @@ void bmpDraw(char *filename, uint8_t x, uint8_t y)
 
   // Open requested file on SD card
   if ((bmpFile = SD.open(filename)) == NULL) {
-//    Serial.print("File not found");
+    Serial.print("filename");
+    Serial.println(" not found");
     return;
   }
 
   // Parse BMP header
   if(read16(bmpFile) == 0x4D42) { // BMP signature
-//    Serial.print("File size: "); Serial.println(
+//    Serial.print("File size: "); Serial.println(read32(bmpFile));
     read32(bmpFile);
     (void)read32(bmpFile); // Read & ignore creator bytes
     bmpImageoffset = read32(bmpFile); // Start of image data
 //    Serial.print("Image Offset: "); Serial.println(bmpImageoffset, DEC);
     // Read DIB header
-//    Serial.print("Header size: "); Serial.println(
+//    Serial.print("Header size: "); Serial.println(read32(bmpFile));
     read32(bmpFile);
     bmpWidth  = read32(bmpFile);
     bmpHeight = read32(bmpFile);
@@ -444,27 +448,25 @@ void bmpDraw(char *filename, uint8_t x, uint8_t y)
   }
 
   bmpFile.close();
-  // if(!goodBmp) Serial.println("BMP format not recognized.");
+  if(!goodBmp) Serial.println("BMP format not recognized.");
 }
 
 // These read 16- and 32-bit types from the SD card file.
 // BMP data is stored little-endian, Arduino is little-endian too.
 // May need to reverse subscript order if porting elsewhere.
 
-uint16_t read16(File f) 
-{
-    uint16_t result;
-    ((uint8_t *)&result)[0] = f.read(); // LSB
-    ((uint8_t *)&result)[1] = f.read(); // MSB
-    return result;
+uint16_t read16(File f) {
+  uint16_t result;
+  ((uint8_t *)&result)[0] = f.read(); // LSB
+  ((uint8_t *)&result)[1] = f.read(); // MSB
+  return result;
 }
 
-uint32_t read32(File f) 
-{
-    uint32_t result;
-    ((uint8_t *)&result)[0] = f.read(); // LSB
-    ((uint8_t *)&result)[1] = f.read();
-    ((uint8_t *)&result)[2] = f.read();
-    ((uint8_t *)&result)[3] = f.read(); // MSB
-    return result;
+uint32_t read32(File f) {
+  uint32_t result;
+  ((uint8_t *)&result)[0] = f.read(); // LSB
+  ((uint8_t *)&result)[1] = f.read();
+  ((uint8_t *)&result)[2] = f.read();
+  ((uint8_t *)&result)[3] = f.read(); // MSB
+  return result;
 }
