@@ -105,9 +105,9 @@ void loop(void)
     }
 
     // wait for cup
-    if (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD)
+    if (analogRead(CUP_SENSOR_PIN) < CUP_PRESENT_THRESHOLD)
     {
-        Serial.println("Cup Not Detected");
+//        Serial.println("Cup Not Detected");
         // cup is not detected
         isCupDetected = false;
         bmpDraw("SCREEN1.BMP", 0, 0);
@@ -118,7 +118,7 @@ void loop(void)
         while(!isCupDetected && timerValid)   // timerValid is updated when timer expires
         {
             // check again. if valid, continue
-            if(analogRead(CUP_SENSOR_PIN) <= CUP_PRESENT_THRESHOLD) 
+            if(analogRead(CUP_SENSOR_PIN) >= CUP_PRESENT_THRESHOLD) 
             {
                 Timer1.stop();
                 isCupDetected = true;
@@ -255,7 +255,7 @@ boolean checkforCup(void)
 {
     while (isDispensing) 
     {
-        if (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD) // cup is no longer detected
+        if (analogRead(CUP_SENSOR_PIN) < CUP_PRESENT_THRESHOLD) // cup is no longer detected
         {
             // stop timer
             Timer1.stop();
@@ -272,7 +272,7 @@ boolean checkforCup(void)
             // enable walk away timer
             startTimer(0, CUP_PRESENT_TIMEOUT);
 
-            while (analogRead(CUP_SENSOR_PIN) > CUP_PRESENT_THRESHOLD && timerValid) 
+            while (analogRead(CUP_SENSOR_PIN) < CUP_PRESENT_THRESHOLD && timerValid) 
                 ; /*just wait*/
 
             if (!timerValid)
