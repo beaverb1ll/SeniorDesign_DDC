@@ -1,4 +1,4 @@
-LCD     CPU
+LCD     Arduino Digital Pins
  1  =>  GND
  2  =>  5V
  3  =>  RST
