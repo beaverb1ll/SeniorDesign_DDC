@@ -4,11 +4,11 @@
 #include <SD.h>
 #include <TimerOne.h>
 
-#define CUP_PRESENT_THRESHOLD 600   // this holds the voltage reading that a cup is considered present
+#define CUP_PRESENT_THRESHOLD 350   // this holds the voltage reading that a cup is considered present. The closer the cup, the greater the number.
 #define SERIAL_READ_TIMEOUT 10000     // (ms)
 #define CUP_PRESENT_TIMEOUT 10000     // (ms)
 #define NUM_INGREDIENTS 6
-#define CUP_SENSOR_PIN A4
+#define CUP_SENSOR_PIN A0
 
 #define ON LOW
 #define OFF HIGH
@@ -56,7 +56,7 @@ void setup(void)
 
     // configure serial port
     Serial.begin(9600);
-    Serial.println("Board Reset");
+//    Serial.println("Board Reset");
 
     // configure timer
     Timer1.attachInterrupt(timerInterrupt);
@@ -66,7 +66,7 @@ void setup(void)
 
     if (!SD.begin(SD_CS)) 
     {
-        Serial.println("SD Card failed!");
+//        Serial.println("SD Card failed!");
         return;
     }
     bmpDraw("SCREEN0.BMP", 0, 0);
@@ -90,16 +90,16 @@ void loop(void)
    // test for operation
     if (input != 'D')
     {
-       // Serial.println("Invalid Command");
+//       Serial.println("Invalid Command");
         Serial.print('N');
         return;
     }
     Serial.print('Y');
-    // Serial.println("Reading Ingredients...");
+//    Serial.println("Reading Ingredients...");
     // read in ingredients and store into array
    if(!readIngredients()) 
    {
-        // Serial.println("Error Reading ingredients");
+//        Serial.println("Error Reading ingredients");
         Serial.print('N');
         return;
     }
@@ -126,7 +126,7 @@ void loop(void)
         }
         if (!timerValid)
         {
-            // Serial.println("No cup detected before timer expired");
+//            Serial.println("No cup detected before timer expired");
             if(!sendCommand_getAck('N')) 
             {
                 // handle the error somehow
@@ -137,7 +137,7 @@ void loop(void)
     }
 
     // update display
-    // Serial.println("Cup Detected. Dispensing...");
+//    Serial.println("Cup Detected. Dispensing...");
     bmpDraw("SCREEN2.BMP", 0, 0);
 
    // loop through all ingredients
@@ -154,13 +154,15 @@ void loop(void)
     
     // update display
     bmpDraw("screen3.bmp", 0, 0);
+    delay(500);
     bmpDraw("screen0.bmp", 0, 0);
 }
 
 boolean sendCommand_getAck(char aCommand) 
 {
     // send aCommand over serial and wait for a response
-
+    Serial.print(aCommand);
+    
     startTimer(0, SERIAL_READ_TIMEOUT);
     while (Serial.available() == 0 && timerValid)
           ;  /* just wait */
@@ -219,6 +221,7 @@ boolean readIngredients(void)
             {
                 dString[j] = '\0';
                 int amount = atoi(dString);
+                // amount *= OZ_TO_SEC_RATIO;
                 ingredients[i] = amount;
                 Serial.print('Y');
                 break;
@@ -281,9 +284,9 @@ boolean checkforCup(void)
             }
 
             // restore timer value
+            bmpDraw("screen2.bmp", 0, 0);
             startTimer(amountDispensed, ingredients[currentIngred]);
             digitalWrite(pins[currentIngred], ON);
-            bmpDraw("screen2.bmp", 0, 0);
         } else if(!timerValid)
         {
             digitalWrite(pins[currentIngred], OFF);
@@ -362,8 +365,8 @@ void bmpDraw(char *filename, uint8_t x, uint8_t y) {
 
   // Open requested file on SD card
   if ((bmpFile = SD.open(filename)) == NULL) {
-    Serial.print("filename");
-    Serial.println(" not found");
+    // Serial.print("filename");
+    // Serial.println(" not found");
     return;
   }
 
