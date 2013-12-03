@@ -4,10 +4,9 @@
 #include <SD.h>
 #include <TimerOne.h>
 
-#define CUP_PRESENT_THRESHOLD 600   // this holds the voltage reading that a cup is considered present. The closer the cup, the greater the number.
+#define CUP_PRESENT_THRESHOLD 350   // this holds the voltage reading that a cup is considered present. The closer the cup, the greater the number.
 #define SERIAL_READ_TIMEOUT 10000     // (ms)
 #define CUP_PRESENT_TIMEOUT 10000     // (ms)
-#define OZ_TO_SEC_RATIO 1000         // Num OZ/milliSec
 #define NUM_INGREDIENTS 6
 #define CUP_SENSOR_PIN A0
 
@@ -155,13 +154,15 @@ void loop(void)
     
     // update display
     bmpDraw("screen3.bmp", 0, 0);
+    delay(500);
     bmpDraw("screen0.bmp", 0, 0);
 }
 
 boolean sendCommand_getAck(char aCommand) 
 {
     // send aCommand over serial and wait for a response
-
+    Serial.print(aCommand);
+    
     startTimer(0, SERIAL_READ_TIMEOUT);
     while (Serial.available() == 0 && timerValid)
           ;  /* just wait */
@@ -220,7 +221,7 @@ boolean readIngredients(void)
             {
                 dString[j] = '\0';
                 int amount = atoi(dString);
-                amount *= OZ_TO_SEC_RATIO;
+                // amount *= OZ_TO_SEC_RATIO;
                 ingredients[i] = amount;
                 Serial.print('Y');
                 break;
@@ -283,9 +284,9 @@ boolean checkforCup(void)
             }
 
             // restore timer value
+            bmpDraw("screen2.bmp", 0, 0);
             startTimer(amountDispensed, ingredients[currentIngred]);
             digitalWrite(pins[currentIngred], ON);
-            bmpDraw("screen2.bmp", 0, 0);
         } else if(!timerValid)
         {
             digitalWrite(pins[currentIngred], OFF);
